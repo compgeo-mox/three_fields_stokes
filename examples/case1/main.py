@@ -26,7 +26,8 @@ def main():
     pg.convert_from_pp(g)
     g.compute_geometry()
 
-    data = {}
+    parameters = {"second_order_tensor": pp.SecondOrderTensor(np.ones(g.num_cells))}
+    data = {pp.PARAMETERS: {keyword: parameters}}
     data[pp.DISCRETIZATION_MATRICES] = {keyword: {}}
     nd1 = pg.Nedelec1(keyword)
 
@@ -37,13 +38,26 @@ def main():
 
     A = curl * sps.linalg.spsolve(M, curl.T)
     div = pg.div(g)
-
     spp = sps.bmat([[A, -div.T], [div, None]])
 
-    x = sps.linalg.spsolve(spp, np.zeros(spp.shape[0]))
+    rt0 = pp.RT0(keyword)
+    rt0.discretize(g, data)
 
-    spp3 = sps.bmat([[M, -curl.T, None], [curl, None, -div.T], [None, div, None]])
-    x = sps.linalg.spsolve(spp3, np.zeros(spp3.shape[0]))
+    proj = data[pp.DISCRETIZATION_MATRICES][keyword]["vector_proj"]
+    rhs = np.zeros(spp.shape[0])
+    rhs[:g.num_faces] = proj.T * np.ones(3*g.num_cells)
+
+    x = sps.linalg.spsolve(spp, rhs)
+    u = x[:g.num_faces]
+    p = x[-g.num_cells:]
+
+    P0u = rt0.project_flux(g, u, data)
+
+    save = pp.Exporter(g, "sol")
+    save.write_vtu([("P0u", P0u), ("p", p)])
+
+    #spp3 = sps.bmat([[M, -curl.T, None], [curl, None, -div.T], [None, div, None]])
+    #x = sps.linalg.spsolve(spp3, np.zeros(spp3.shape[0]))
 
 
     plt.spy(spp3)
