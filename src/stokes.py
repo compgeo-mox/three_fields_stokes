@@ -8,13 +8,18 @@ class Stokes:
         self.keyword = keyword
         self.g = g
         self.nd1 = pg.Nedelec1(keyword)
+        self.rt0 = pp.RT0(keyword)
 
     def discretize(self, data):
-        data[pp.DISCRETIZATION_MATRICES] = {keyword: {}}
-        self.nd1.discretize(self.g, data)
+        data[pp.DISCRETIZATION_MATRICES] = {self.keyword: {}}
 
+        self.nd1.discretize(self.g, data)
         self.M = data[pp.DISCRETIZATION_MATRICES][self.keyword]["mass"]
-        self.curl = data[pp.DISCRETIZATION_MATRICES][self.keyword]["curl"]
+
+        self.rt0.discretize(self.g, data)
+        mass_rt0 = data[pp.DISCRETIZATION_MATRICES][self.keyword]["mass"]
+
+        self.curl = mass_rt0 * data[pp.DISCRETIZATION_MATRICES][self.keyword]["curl"]
         self.div = pg.div(self.g)
 
     def assemble_hybridized(self, data):
