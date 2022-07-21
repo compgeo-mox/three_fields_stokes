@@ -1,4 +1,4 @@
-from sympy import cos, diff, pi
+from sympy import cos, sin, diff, pi
 from sympy.physics.vector import ReferenceFrame, curl, gradient
 
 R = ReferenceFrame("R")
@@ -28,7 +28,7 @@ def compute_source(u, p, R):
 
 ## -------------------------------------------------------------------##
 """
-The two-dimensional case
+The two-dimensional polynomial case
 """
 
 u = i * (-2 * x * y * (x - 1) * (y - 1) * x * (x - 1) * (2 * y - 1))
@@ -47,10 +47,12 @@ The three-dimensional case
 Generate u = curl phi with phi = 0 and grad phi = 0 on the boundary
 """
 
-phi = (i + j + k) * cos(2 * pi * x) * cos(2 * pi * y) * cos(2 * pi * z)
+phi = i * (1 - x) * x * (1 - cos(2 * pi * y)) * (1 - cos(2 * pi * z))
+phi += j * (1 - y) * y * (1 - cos(2 * pi * z)) * (1 - cos(2 * pi * x))
+phi += k * (1 - z) * z * (1 - cos(2 * pi * x)) * (1 - cos(2 * pi * y))
 
 u = curl(phi, R)
-p = 0
+p = x * (1 - x) * (1 - cos(2 * pi * y)) * sin(2 * pi * z)
 
 g = compute_source(u, p, R)
 
