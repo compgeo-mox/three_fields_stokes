@@ -44,7 +44,7 @@ print("2D source: ", g)
 ## -------------------------------------------------------------------##
 """
 The three-dimensional case
-Generate u = curl phi with phi = 0 and grad phi = 0 on the boundary
+Generate u = curl phi with phi = 0 on the boundary
 """
 
 phi = i * (1 - x) * x * (1 - cos(2 * pi * y)) * (1 - cos(2 * pi * z))
