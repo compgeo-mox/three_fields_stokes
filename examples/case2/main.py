@@ -58,7 +58,7 @@ def main(n):
     curl = mass_rt0 * pg.curl(mdg)
     div = pg.div(mdg)
 
-    A = curl * sps.linalg.spsolve(M.tocsc(), curl.T)
+    A = curl * sps.linalg.spsolve(M.tocsc(), curl.T.tocsc())
     spp = sps.bmat([[A, -div.T], [div, None]], format="csc")
 
     proj = data[pp.DISCRETIZATION_MATRICES][keyword]["vector_proj"]
@@ -69,7 +69,7 @@ def main(n):
     u = x[: sd.num_faces]
     p = x[-sd.num_cells :]
 
-    rt0 = pp.RT0("flow")
+    rt0 = pp.RT0(keyword)
     P0u = rt0.project_flux(sd, u, data)
 
     err_u = np.sqrt(
