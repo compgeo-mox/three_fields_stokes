@@ -3,10 +3,12 @@ import scipy.sparse as sps
 import porepy as pp
 import pygeon as pg
 
+import sys; sys.path.append("../../src/")
+from stokes import Stokes2D
 
-def source(g):
-    x = g.cell_centers[0, :]
-    y = g.cell_centers[1, :]
+def vector_source(sd):
+    x = sd.cell_centers[0, :]
+    y = sd.cell_centers[1, :]
     first = -4 * (
         x**4 * (6 * y - 3)
         + x**3 * (6 - 12 * y)
@@ -21,30 +23,38 @@ def source(g):
         - 3 * (y - 1) ** 2 * y**2
     )
     return np.vstack(
-        (-g.cell_volumes * first, -g.cell_volumes * second, np.zeros(g.num_cells))
+        (-sd.cell_volumes * first, -sd.cell_volumes * second, np.zeros(sd.num_cells))
     ).ravel(order="F")
 
 
-def p_ex(g):
-    return np.zeros(g.num_cells)
+def p_ex(sd):
+    return np.zeros(sd.num_cells)
 
 
-def u_ex(g):
-    x = g.cell_centers[0, :]
-    y = g.cell_centers[1, :]
+def u_ex(sd):
+    x = sd.cell_centers[0, :]
+    y = sd.cell_centers[1, :]
     first = -2 * x * y * (x - 1) * (y - 1) * x * (x - 1) * (2 * y - 1)
     second = 2 * x * y * (x - 1) * (y - 1) * y * (y - 1) * (2 * x - 1)
-    return np.vstack((first, second, np.zeros(g.num_cells)))
+    return np.vstack((first, second, np.zeros(sd.num_cells)))
 
 
-def main(n):
-    keyword = "flow"  # "stokes"
+def create_grid(n):
+    # make the grid
+    domain = {"xmin": 0, "xmax": 1, "ymin": 0, "ymax": 1, "zmin": 0, "zmax": 1}
+    network = pp.FractureNetwork2d(domain=domain)
 
-    sd = pp.StructuredTriangleGrid([n] * 2, [1] * 2)
-    mdg = pp.meshing.subdomains_to_mdg([[sd]])
+    mesh_size = 1/n
+    mesh_kwargs = {"mesh_size_frac": mesh_size, "mesh_size_min": mesh_size}
+
+    mdg = network.mesh(mesh_kwargs)
     pg.convert_from_pp(mdg)
     mdg.compute_geometry()
 
+    return mdg
+
+def main(mdg, keyword = "flow"):
+    # set the data
     for sd, data in mdg.subdomains(return_data=True):
         parameters = {
             "second_order_tensor": pp.SecondOrderTensor(np.ones(sd.num_cells))
@@ -52,25 +62,19 @@ def main(n):
         data[pp.PARAMETERS] = {keyword: parameters}
         data[pp.DISCRETIZATION_MATRICES] = {keyword: {}}
 
-    mass_rt0 = pg.face_mass(mdg)
-    M = pg.numerics.innerproducts.lumped_mass_matrix(mdg, 2, None)
+    vect = np.hstack([vector_source(sd) for sd in mdg.subdomains()])
 
-    curl = mass_rt0 * pg.curl(mdg)
-    div = pg.div(mdg)
+    # create the Stokes solver
+    st = Stokes2D(keyword)
+    spp, rhs, proj = st.matrix_and_rhs(mdg, vect)
 
-    A = curl * sps.linalg.spsolve(M.tocsc(), curl.T)
-    spp = sps.bmat([[A, -div.T], [div, None]], format="csc")
-
-    proj = data[pp.DISCRETIZATION_MATRICES][keyword]["vector_proj"]
-    rhs = sps.lil_matrix((spp.shape[0], 1))
-    rhs[: sd.num_faces] = proj.T * source(sd)
-
+    # solve the problem
     x = sps.linalg.spsolve(spp, rhs.tocsc())
-    u = x[: sd.num_faces]
-    p = x[-sd.num_cells :]
+    u = x[:mdg.num_subdomain_faces()]
+    p = x[-mdg.num_subdomain_cells():]
 
-    rt0 = pp.RT0("flow")
-    P0u = rt0.project_flux(sd, u, data)
+    # post process
+    P0u = (proj.T * u).reshape((3, -1), order="F")
 
     err_u = np.sqrt(
         np.trace((u_ex(sd) - P0u) @ sps.diags(sd.cell_volumes) @ (u_ex(sd) - P0u).T)
@@ -85,4 +89,4 @@ def main(n):
 
 if __name__ == "__main__":
     N = 2 ** np.arange(3, 8)
-    [main(n) for n in N]
+    [main(create_grid(n)) for n in N]
