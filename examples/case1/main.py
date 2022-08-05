@@ -3,45 +3,50 @@ import scipy.sparse as sps
 import porepy as pp
 import pygeon as pg
 
-import sys
-
-sys.path.append("../../src/")
-from stokes import Stokes3D
-
+import sys; sys.path.append("../../src/")
+from stokes import Stokes3DHyb, Stokes
+import error
 
 def vector_source(sd):
+    x = sd.face_centers[0, :]
+    y = sd.face_centers[1, :]
+    z = sd.face_centers[2, :]
+
+    first = y*z*(1 - 2*x)*(y - 1)*(z - 1)
+    second = 4*x*y**2*z**2*(x - 1)*(z - 1) + 12*x*y**2*z*(x - 1)*(y - 1)**2 + 4*x*y**2*z*(x - 1)*(z - 1)**2 + 12*x*y**2*(x - 1)*(y - 1)**2*(z - 1) + 16*x*y*z**2*(x - 1)*(y - 1)*(z - 1) + 16*x*y*z*(x - 1)*(y - 1)*(z - 1)**2 - x*y*z*(x - 1)*(z - 1) + 4*x*z**2*(x - 1)*(y - 1)**2*(z - 1) + 4*x*z*(x - 1)*(y - 1)**2*(z - 1)**2 - x*z*(x - 1)*(y - 1)*(z - 1) + 4*y**2*z**2*(y - 1)**2*(z - 1) + 4*y**2*z*(y - 1)**2*(z - 1)**2
+    third = -4*x*y**2*z**2*(x - 1)*(y - 1) - 16*x*y**2*z*(x - 1)*(y - 1)*(z - 1) - 4*x*y**2*(x - 1)*(y - 1)*(z - 1)**2 - 4*x*y*z**2*(x - 1)*(y - 1)**2 - 12*x*y*z**2*(x - 1)*(z - 1)**2 - 16*x*y*z*(x - 1)*(y - 1)**2*(z - 1) - x*y*z*(x - 1)*(y - 1) - 4*x*y*(x - 1)*(y - 1)**2*(z - 1)**2 - x*y*(x - 1)*(y - 1)*(z - 1) - 12*x*z**2*(x - 1)*(y - 1)*(z - 1)**2 - 4*y**2*z**2*(y - 1)*(z - 1)**2 - 4*y*z**2*(y - 1)**2*(z - 1)**2
+
+    source = np.vstack((first, second, third))
+    return np.sum(sd.face_normals * source, axis=0)
+
+def r_ex(sd):
     x = sd.cell_centers[0, :]
     y = sd.cell_centers[1, :]
     z = sd.cell_centers[2, :]
 
-    first = 0
-    second = 4*np.pi*(2*x*np.pi**2*(x - 1)*(np.cos(2*y*np.pi) - 1) + 2*x*np.pi**2*(x - 1)*np.cos(2*y*np.pi) - np.cos(2*y*np.pi) + 1)*np.sin(2*z*np.pi)
-    third = 4*np.pi*(-2*x*np.pi**2*(x - 1)*(np.cos(2*z*np.pi) - 1) - 2*x*np.pi**2*(x - 1)*np.cos(2*z*np.pi) + np.cos(2*z*np.pi) - 1)*np.sin(2*y*np.pi)
+    first = 2*x*(x - 1)*(y**2*z**2*(y - 1)**2 + y**2*z**2*(z - 1)**2 + 4*y**2*z*(y - 1)**2*(z - 1) + y**2*(y - 1)**2*(z - 1)**2 + 4*y*z**2*(y - 1)*(z - 1)**2 + z**2*(y - 1)**2*(z - 1)**2)
+    second = -2*y*z**2*(y - 1)*(z - 1)**2*(x*y + x*(y - 1) + y*(x - 1) + (x - 1)*(y - 1))
+    third = -2*y**2*z*(y - 1)**2*(z - 1)*(x*z + x*(z - 1) + z*(x - 1) + (x - 1)*(z - 1))
 
-    return np.vstack(
-        (sd.cell_volumes * first, sd.cell_volumes * second, sd.cell_volumes * third)
-    ).ravel(order="F")
+    return np.vstack((first, second, third))
 
-
-def p_ex(sd):
-    x = sd.cell_centers[0, :]
-    y = sd.cell_centers[1, :]
-    z = sd.cell_centers[2, :]
-
-    return 0 #x * (1 - x) * (1 - np.cos(2 * y * np.pi)) * np.sin(2 * z * np.pi)
-
-
-def u_ex(sd):
+def q_ex(sd):
     x = sd.cell_centers[0, :]
     y = sd.cell_centers[1, :]
     z = sd.cell_centers[2, :]
 
     first = np.zeros(sd.num_cells)
-    second = 2*x*np.pi*(1 - x)*(1 - np.cos(2*y*np.pi))*np.sin(2*z*np.pi)
-    third = -2*x*np.pi*(1 - x)*(1 - np.cos(2*z*np.pi))*np.sin(2*y*np.pi)
+    second = x*y**2*z**2*(1 - x)*(1 - y)**2*(2*z - 2) + 2*x*y**2*z*(1 - x)*(1 - y)**2*(1 - z)**2
+    third = -x*y**2*z**2*(1 - x)*(1 - z)**2*(2*y - 2) - 2*x*y*z**2*(1 - x)*(1 - y)**2*(1 - z)**2
 
     return np.vstack((first, second, third))
 
+def p_ex(sd):
+    x = sd.nodes[0, :]
+    y = sd.nodes[1, :]
+    z = sd.nodes[2, :]
+
+    return x*y*z*(1 - x)*(1 - y)*(1 - z)
 
 def create_grid(n):
     # make the grid
@@ -57,9 +62,36 @@ def create_grid(n):
 
     return mdg
 
+def solve_stokes(mdg, keyword, source, bc_val):
+    st = Stokes(keyword)
+    spp, rhs = st.matrix_and_rhs(mdg, source, bc_val)
 
-def main(mdg, keyword="flow"):
+    # solve the problem
+    x = sps.linalg.spsolve(spp, rhs)
+    r = x[:mdg.num_subdomain_ridges()]
+    q = x[mdg.num_subdomain_ridges():mdg.num_subdomain_ridges()+mdg.num_subdomain_faces()]
+    p = x[-mdg.num_subdomain_cells():]
+
+    return r, q, p
+
+def solve_stokes_hyb(mdg, keyword, source, bc_val):
+    # create the Stokes solver
+    st = Stokes3DHyb(keyword)
+    spp, rhs, M, curl = st.matrix_and_rhs(mdg, source, bc_val)
+
+    # solve the problem
+    x = sps.linalg.spsolve(spp, rhs)
+    q = x[:mdg.num_subdomain_faces()]
+    p = x[-mdg.num_subdomain_cells():]
+
+    # post process vorticity
+    r = sps.linalg.spsolve(M, curl.T @ q)
+    return r, q, p
+
+def main(mdg, stokes, ne, keyword="flow"):
     # set the data
+    bc_val = []
+    source = []
     for sd, data in mdg.subdomains(return_data=True):
         parameters = {
             "second_order_tensor": pp.SecondOrderTensor(np.ones(sd.num_cells))
@@ -67,37 +99,41 @@ def main(mdg, keyword="flow"):
         data[pp.PARAMETERS] = {keyword: parameters}
         data[pp.DISCRETIZATION_MATRICES] = {keyword: {}}
 
-    vect = np.hstack([vector_source(sd) for sd in mdg.subdomains()])
+        b_faces = sd.tags["domain_boundary_faces"].nonzero()[0]
+        b_face_centers = sd.face_centers[:, b_faces]
 
-    # create the Stokes solver
-    st = Stokes3D(keyword)
-    print("discretize the matrix and rhs")
-    spp, rhs, proj = st.matrix_and_rhs(mdg, vect)
+        faces, _, sign = sps.find(sd.cell_faces)
+        sign = sign[np.unique(faces, return_index=True)[1]]
 
-    # solve the problem
-    print("solve the problem")
-    x = sps.linalg.spsolve(spp, rhs.tocsc())
-    print("done")
-    u = x[:mdg.num_subdomain_faces()]
-    p = x[-mdg.num_subdomain_cells():]
+        bc_val.append(np.zeros(sd.num_faces))
+        source.append(vector_source(sd))
 
-    # post process
-    P0u = (proj.T * u).reshape((3, -1), order="F")
+    r, q, p = stokes(mdg, keyword, np.hstack(source), np.hstack(bc_val))
 
-    err_u = np.sqrt(
-        np.trace((u_ex(sd) - P0u) @ sps.diags(sd.cell_volumes) @ (u_ex(sd) - P0u).T)
-    )
-    err_p = np.sqrt((p_ex(sd) - p) @ sps.diags(sd.cell_volumes) @ (p_ex(sd) - p).T)
+    # post process vorticity
+    proj_r = pg.eval_at_cell_centers(mdg, ne(keyword))
+    P0r = (proj_r * r).reshape((3, -1), order="F")
 
-    print(spp.shape[0], np.mean(sd.cell_diameters()), err_u, err_p)
+    # post process velocity
+    proj_q = pg.proj_faces_to_cells(mdg)
+    P0q = (proj_q * q).reshape((3, -1), order="F")
 
-    # for sd, data in mdg.subdomains(return_data=True):
-    #    data[pp.STATE] = {"P0u": P0u, "p": p}
+    # compute the error
+    return error.compute(sd, P0r, r_ex, P0q, q_ex, p, p_ex)
 
-    # save = pp.Exporter(mdg, "sol")
-    # save.write_vtu(["P0u", "p"])
+    #for sd, data in mdg.subdomains(return_data=True):
+    #   data[pp.STATE] = {"P0r": P0r, "P0q": P0q, "p": p, "err_p": p_ex(sd) - p, "p_ex": p_ex(sd)}
 
+    #save = pp.Exporter(mdg, "sol")
+    #save.write_vtu(["P0r", "P0q", "p", "err_p", "p_ex"])
 
 if __name__ == "__main__":
-    N = 2**np.arange(3, 7)
-    [main(create_grid(n)) for n in N]
+
+    N = np.arange(9, 14)
+    print("stokes")
+    err = np.array([main(create_grid(n), solve_stokes, pg.Nedelec0) for n in N])
+    error.order(err)
+
+    print("stokes hyb")
+    err_hyb = np.array([main(create_grid(n), solve_stokes_hyb, pg.Nedelec1) for n in N])
+    error.order(err_hyb)

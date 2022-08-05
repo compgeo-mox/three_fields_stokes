@@ -1,11 +1,9 @@
 from sympy import cos, sin, diff, pi
 from sympy.physics.vector import ReferenceFrame, curl, gradient
+from sympy.printing.pycode import NumPyPrinter
 
-R = ReferenceFrame("R")
-
-x, y, z = R.varlist
-i, j, k = (R.x, R.y, R.z)
-
+def to_numpy(expr):
+    return NumPyPrinter().doprint(expr).replace("numpy", "np").replace("R_", "")
 
 def compute_source(u, p, R):
     """
@@ -17,6 +15,7 @@ def compute_source(u, p, R):
     J = u.jacobian(R.varlist)
     J += J.T  # symmetrize, divide by 2, times 2 mu with mu = 1
 
+    x, y, z = R.varlist
     g = -diff(J[:, 0], x)
     g -= diff(J[:, 1], y)
     g -= diff(J[:, 2], z)
@@ -27,33 +26,68 @@ def compute_source(u, p, R):
 
 
 ## -------------------------------------------------------------------##
-"""
-The two-dimensional polynomial case
-"""
+def two_dim(R):
+    """
+    The two-dimensional polynomial case
+    """
 
-u = i * (-2 * x * y * (x - 1) * (y - 1) * x * (x - 1) * (2 * y - 1))
-u += j * (2 * x * y * (x - 1) * (y - 1) * y * (y - 1) * (2 * x - 1))
+    x, y, z = R.varlist
+    i, j, k = (R.x, R.y, R.z)
 
-# p = x * (1 - x) * y * (1 - y)
-p = 0
+    u = i * (-2 * x * y * (x - 1) * (y - 1) * x * (x - 1) * (2 * y - 1))
+    u += j * (2 * x * y * (x - 1) * (y - 1) * y * (y - 1) * (2 * x - 1))
 
-g = compute_source(u, p, R)
+    p = x * (1 - x) * y * (1 - y)
+    g = compute_source(u, p, R)
+    r = curl(u, R).simplify()
 
-print("2D source: ", g)
+    print("pressure\n", to_numpy(p))
+
+    print("velocity\n", to_numpy(u.to_matrix(R)[0]))
+    print("velocity\n", to_numpy(u.to_matrix(R)[1]))
+    print("velocity\n", to_numpy(u.to_matrix(R)[2]))
+
+    print("source\n", to_numpy(g[0]))
+    print("source\n", to_numpy(g[1]))
+    print("source\n", to_numpy(g[2]))
+
+    print("vorticity\n", to_numpy(r.to_matrix(R)[2]))
 
 ## -------------------------------------------------------------------##
-"""
-The three-dimensional case
-Generate u = curl phi with phi = 0 on the boundary
-"""
+def three_dim(R):
+    """
+    The three-dimensional case
+    Generate u = curl phi with phi = 0 on the boundary
+    """
 
-phi = i * (1 - x) * x * (1 - cos(2 * pi * y)) * (1 - cos(2 * pi * z))
-phi += j * (1 - y) * y * (1 - cos(2 * pi * z)) * (1 - cos(2 * pi * x))
-phi += k * (1 - z) * z * (1 - cos(2 * pi * x)) * (1 - cos(2 * pi * y))
+    x, y, z = R.varlist
+    i, j, k = (R.x, R.y, R.z)
 
-u = curl(phi, R)
-p = x * (1 - x) * (1 - cos(2 * pi * y)) * sin(2 * pi * z)
+    phi = i * (1 - x) * x * (1 - y)**2 * y**2 * (1 - z)**2 * z**2
+    #phi += j * (1 - y) * y * (1 - z)**2 * z**2 * (1 - x)**2 * x**2
+    #phi += k * (1 - z) * z * (1 - x)**2 * x**2 * (1 - y)**2 * y**2
 
-g = compute_source(u, p, R)
+    u = curl(phi, R)
+    p = x * (1 - x) * y * (1 - y) * z * (1 - z)
+    g = compute_source(u, p, R)
+    r = curl(u, R).simplify()
 
-print("3D source: ", g)
+    print("velocity\n", to_numpy(u.to_matrix(R)[0]))
+    print("velocity\n", to_numpy(u.to_matrix(R)[1]))
+    print("velocity\n", to_numpy(u.to_matrix(R)[2]))
+
+    print("pressure\n", to_numpy(p))
+
+    print("source\n", to_numpy(g[0]))
+    print("source\n", to_numpy(g[1]))
+    print("source\n", to_numpy(g[2]))
+
+    print("vorticity\n", to_numpy(r.to_matrix(R)[0]))
+    print("vorticity\n", to_numpy(r.to_matrix(R)[1]))
+    print("vorticity\n", to_numpy(r.to_matrix(R)[2]))
+
+if __name__ == "__main__":
+    R = ReferenceFrame("R")
+
+    two_dim(R)
+    #three_dim(R)
