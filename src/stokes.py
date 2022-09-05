@@ -3,6 +3,7 @@ import scipy.sparse as sps
 import porepy as pp
 import pygeon as pg
 
+
 class Stokes2DHyb:
     def __init__(self, keyword):
         self.keyword = keyword
@@ -21,7 +22,7 @@ class Stokes2DHyb:
 
         # assemble the right-hand side
         rhs = np.zeros(spp.shape[0])
-        rhs[:face_mass.shape[0]] = face_mass * source + bc_val
+        rhs[: face_mass.shape[0]] = face_mass * source + bc_val
 
         return spp, rhs, M, curl
 
@@ -46,9 +47,10 @@ class Stokes3DHyb:
 
         # assemble the right-hand side
         rhs = np.zeros(spp.shape[0])
-        rhs[:face_mass.shape[0]] = face_mass * source + bc_val
+        rhs[: face_mass.shape[0]] = face_mass * source + bc_val
 
         return spp, rhs, M, curl
+
 
 class Stokes:
     def __init__(self, keyword):
@@ -63,10 +65,12 @@ class Stokes:
         div = pg.div(mdg)
 
         # assemble the saddle point problem
-        spp = sps.bmat([[M, -curl.T, None], [curl, None, -div.T], [None, div, None]], format="csc")
+        spp = sps.bmat(
+            [[M, -curl.T, None], [curl, None, -div.T], [None, div, None]], format="csc"
+        )
 
         # assemble the right-hand side
         rhs = np.zeros(spp.shape[0])
-        rhs[M.shape[0]:M.shape[0]+face_mass.shape[0]] = face_mass * source + bc_val
+        rhs[M.shape[0] : M.shape[0] + face_mass.shape[0]] = face_mass * source + bc_val
 
         return spp, rhs
