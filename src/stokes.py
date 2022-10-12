@@ -3,6 +3,7 @@ import scipy.sparse as sps
 import porepy as pp
 import pygeon as pg
 
+
 class Stokes2DHyb:
     def __init__(self, keyword):
         self.keyword = keyword
@@ -54,6 +55,7 @@ class Stokes3DHyb:
 
         return spp, rhs, M, curl
 
+
 class Stokes:
     def __init__(self, keyword):
         self.keyword = keyword
@@ -69,7 +71,9 @@ class Stokes:
         div = cell_mass * pg.div(mdg)
 
         # assemble the saddle point problem
-        spp = sps.bmat([[M, -curl.T, None], [curl, None, -div.T], [None, div, None]], format="csc")
+        spp = sps.bmat(
+            [[M, -curl.T, None], [curl, None, -div.T], [None, div, None]], format="csc"
+        )
 
         # assemble the right-hand side
         rhs = np.zeros(spp.shape[0])
