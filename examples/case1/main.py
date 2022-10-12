@@ -62,9 +62,9 @@ def create_grid(n):
 
     return mdg
 
-def solve_stokes(mdg, keyword, source, bc_val):
+def solve_stokes(mdg, keyword, source, bc_val_face):
     st = Stokes(keyword)
-    spp, rhs = st.matrix_and_rhs(mdg, source, bc_val)
+    spp, rhs = st.matrix_and_rhs(mdg, source, bc_val_face)
 
     # solve the problem
     x = sps.linalg.spsolve(spp, rhs)
@@ -74,10 +74,10 @@ def solve_stokes(mdg, keyword, source, bc_val):
 
     return r, q, p
 
-def solve_stokes_hyb(mdg, keyword, source, bc_val):
+def solve_stokes_hyb(mdg, keyword, source, bc_val_face):
     # create the Stokes solver
     st = Stokes3DHyb(keyword)
-    spp, rhs, M, curl = st.matrix_and_rhs(mdg, source, bc_val)
+    spp, rhs, M, curl = st.matrix_and_rhs(mdg, source, bc_val_face)
 
     # solve the problem
     x = sps.linalg.spsolve(spp, rhs)
@@ -90,7 +90,7 @@ def solve_stokes_hyb(mdg, keyword, source, bc_val):
 
 def main(mdg, stokes, ne, keyword="flow"):
     # set the data
-    bc_val = []
+    bc_val_face = []
     source = []
     for sd, data in mdg.subdomains(return_data=True):
         parameters = {
@@ -105,21 +105,26 @@ def main(mdg, stokes, ne, keyword="flow"):
         faces, _, sign = sps.find(sd.cell_faces)
         sign = sign[np.unique(faces, return_index=True)[1]]
 
-        bc_val.append(np.zeros(sd.num_faces))
+        bc_val_face.append(np.zeros(sd.num_faces))
         source.append(vector_source(sd))
 
-    r, q, p = stokes(mdg, keyword, np.hstack(source), np.hstack(bc_val))
+    r, q, p = stokes(mdg, keyword, np.hstack(source), np.hstack(bc_val_face))
+
+    ridge_proj = pg.eval_at_cell_centers(mdg, ne(keyword))
+    face_proj = pg.eval_at_cell_centers(mdg, pg.RT0(keyword))
+    cell_proj = pg.eval_at_cell_centers(mdg, pg.PwConstants(keyword))
 
     # post process vorticity
-    proj_r = pg.eval_at_cell_centers(mdg, ne(keyword))
-    P0r = (proj_r * r).reshape((3, -1), order="F")
+    cell_r = (ridge_proj * r).reshape((3, -1), order="F")
 
     # post process velocity
-    proj_q = pg.proj_faces_to_cells(mdg)
-    P0q = (proj_q * q).reshape((3, -1), order="F")
+    cell_q = (face_proj * q).reshape((3, -1), order="F")
+
+    # post process pressure
+    cell_p = cell_proj * p
 
     # compute the error
-    return error.compute(sd, P0r, r_ex, P0q, q_ex, p, p_ex)
+    return error.compute(sd, cell_r, r_ex, cell_q, q_ex, cell_p, p_ex)
 
     #for sd, data in mdg.subdomains(return_data=True):
     #   data[pp.STATE] = {"P0r": P0r, "P0q": P0q, "p": p, "err_p": p_ex(sd) - p, "p_ex": p_ex(sd)}

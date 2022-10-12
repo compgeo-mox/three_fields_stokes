@@ -13,7 +13,7 @@ def compute(sd, r, r_ex, P0q, q_ex, p, p_ex):
             np.trace(((r_ex(sd) - r) @ sps.diags(sd.cell_volumes) @ (r_ex(sd) - r).T))
         ) / norm_r
     else:
-        mass = pg.Lagrange("flow").assemble_mass_matrix(sd, None)
+        mass = pg.Lagrange1("flow").assemble_mass_matrix(sd, None)
         norm_r = np.sqrt(r_ex(sd) @ mass @ r_ex(sd).T)
         err_r = np.sqrt((r_ex(sd) - r) @ mass @ (r_ex(sd) - r).T) / norm_r
 
