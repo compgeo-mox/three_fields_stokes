@@ -60,7 +60,7 @@ class Stokes:
     def __init__(self, keyword):
         self.keyword = keyword
 
-    def matrix_and_rhs(self, mdg, source, bc_val_face, bc_val_ridges=0):
+    def matrix_and_rhs(self, mdg, source, bc_val_face, bc_val_ridges=0, scalar_source=0):
         # discretize
         M = pg.ridge_mass(mdg)
 
@@ -79,5 +79,5 @@ class Stokes:
         rhs = np.zeros(spp.shape[0])
         rhs[:M.shape[0]] = bc_val_ridges
         rhs[M.shape[0]:M.shape[0]+face_mass.shape[0]] = face_mass * source + bc_val_face
-
+        rhs[-cell_mass.shape[0]:] = scalar_source
         return spp, rhs
